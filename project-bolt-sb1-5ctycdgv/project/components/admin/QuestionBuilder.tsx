@@ -193,7 +193,7 @@ export default function QuestionBuilder({ sessionId, onSaved, editQuestion }: Pr
           </div>
         )}
 
-        {/* KHUSUS PUZZLE & TEBAK GAMBAR */}
+        {/* KHUSUS PUZZLE & TEBAK GAMBAR - VERSI PERBAIKAN */}
         {(type === 'puzzle' || type === 'image_guess') && (
           <div className="space-y-3 bg-sky-50/50 p-4 rounded-xl border border-sky-100">
             <Label className="text-sm font-medium">Upload Gambar Kuis</Label>
@@ -204,25 +204,46 @@ export default function QuestionBuilder({ sessionId, onSaved, editQuestion }: Pr
                 onChange={(e) => {setImageUrl(e.target.value); setPreviewUrl(e.target.value);}}
                 className="bg-white"
               />
-              <label className="cursor-pointer">
-                <Button type="button" variant="outline" className="bg-white border-sky-200 text-sky-600">
-                  <Upload className="w-4 h-4 mr-2" /> {uploading ? '...' : 'Pilih'}
-                </Button>
-                <input type="file" accept="image/*" className="hidden" 
+              <div className="relative">
+                {/* Input file asli yang disembunyikan */}
+                <input 
+                  type="file" 
+                  id="file-upload-input"
+                  accept="image/*" 
+                  className="hidden" 
                   onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'image')} 
                 />
-              </label>
+                {/* Tombol yang terlihat, yang akan memicu input file di atas */}
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="bg-white border-sky-200 text-sky-600"
+                  onClick={() => document.getElementById('file-upload-input')?.click()}
+                >
+                  <Upload className="w-4 h-4 mr-2" /> {uploading ? '...' : 'Pilih'}
+                </Button>
+              </div>
             </div>
             {previewUrl && (
               <div className="mt-2 relative group">
                 <img src={previewUrl} alt="Preview" className="w-full h-40 object-contain rounded-lg border bg-white" />
-                <button onClick={() => {setPreviewUrl(null); setImageUrl('');}} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full"><X className="w-4 h-4"/></button>
+                <button 
+                  type="button"
+                  onClick={() => {setPreviewUrl(null); setImageUrl('');}} 
+                  className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 shadow-lg"
+                >
+                  <X className="w-4 h-4"/>
+                </button>
               </div>
             )}
             {type === 'puzzle' && (
                <div className="mt-2">
-                <Label className="text-xs">Jumlah Kepingan: {puzzlePieces}</Label>
-                <select className="w-full text-sm p-2 rounded-lg mt-1" value={puzzlePieces} onChange={(e)=>setPuzzlePieces(Number(e.target.value))}>
+                <Label className="text-xs text-sky-800 font-semibold">Jumlah Kepingan Puzzle: {puzzlePieces}</Label>
+                <select 
+                  className="w-full text-sm p-2.5 rounded-lg mt-1 border-sky-100 outline-none focus:ring-2 focus:ring-sky-200" 
+                  value={puzzlePieces} 
+                  onChange={(e)=>setPuzzlePieces(Number(e.target.value))}
+                >
                   <option value={36}>36 Keping (Mudah)</option>
                   <option value={64}>64 Keping (Sedang)</option>
                   <option value={100}>100 Keping (Sulit)</option>
