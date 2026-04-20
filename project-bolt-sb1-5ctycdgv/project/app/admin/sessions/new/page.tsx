@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
@@ -9,19 +9,30 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Gamepad2, Save } from 'lucide-react';
+import { ArrowLeft, Gamepad2, Save, Gamepad } from 'lucide-react';
 
 export default function NewSessionPage() {
   const { user, profile } = useAuth();
   const router = useRouter();
+  const [games, setGames] = useState<any[]>([]);
   const [form, setForm] = useState({
     title: '',
     description: '',
+    game_id: '',
     time_per_question: 30,
     show_leaderboard: true,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Ambil daftar game dari database
+  useEffect(() => {
+    const fetchGames = async () => {
+      const { data } = await supabase.from('games').select('*');
+      if (data) setGames(data);
+    };
+    fetchGames();
+  }, []);
 
   const generateCode = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -31,23 +42,30 @@ export default function NewSessionPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || profile?.role !== 'admin') return;
+    if (!form.game_id) {
+      setError('Silakan pilih jenis game terlebih dahulu!');
+      return;
+    }
+    
     setLoading(true);
     setError('');
 
     const { data, error } = await supabase.from('game_sessions').insert({
       title: form.title,
       description: form.description,
+      game_id: form.game_id,
       admin_id: user.id,
       time_per_question: form.time_per_question,
       show_leaderboard: form.show_leaderboard,
-      status: 'draft',
+      status: 'waiting', // Langsung set ke waiting agar bisa join
       join_code: generateCode(),
     }).select().single();
 
     if (error) {
-      setError('Gagal membuat session. Coba lagi.');
+      console.error(error);
+      setError('Gagal membuat session: ' + error.message);
     } else {
-      router.push(`/admin/sessions/${data.id}`);
+      router.push(`/admin/sessions`);
     }
     setLoading(false);
   };
@@ -74,9 +92,29 @@ export default function NewSessionPage() {
         <div className="bg-white rounded-2xl border border-sky-50 p-6 shadow-sm">
           <form onSubmit={handleCreate} className="space-y-5">
             <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Pilih Game</Label>
+              <select 
+                className="w-full p-2.5 rounded-lg border border-sky-100 focus:ring-2 focus:ring-sky-300 outline-none bg-white text-sm"
+                value={form.game_id}
+                onChange={(e) => setForm({ ...form, game_id: e.target.value })}
+                required
+              >
+                <option value="">-- Klik untuk memilih Game --</option>
+                {games.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    [{g.type.toUpperCase()}] - {g.title}
+                  </option>
+                ))}
+              </select>
+              {games.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">Belum ada game di database. Tambahkan dulu di Supabase!</p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
               <Label className="text-sm font-medium">Nama Session</Label>
               <Input
-                placeholder="Contoh: Kuis Matematika Seru!"
+                placeholder="Contoh: Main Puzzle Bareng Ibu-ibu"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
                 required
@@ -85,17 +123,7 @@ export default function NewSessionPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Deskripsi (opsional)</Label>
-              <Textarea
-                placeholder="Deskripsi singkat tentang game ini..."
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                className="border-sky-100 focus-visible:ring-sky-300 min-h-[80px]"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Waktu per Soal (detik)</Label>
+              <Label className="text-sm font-medium">Waktu per Soal/Sesi (detik)</Label>
               <div className="flex items-center gap-3">
                 <input
                   type="range"
@@ -128,18 +156,8 @@ export default function NewSessionPage() {
               <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg p-3">{error}</div>
             )}
 
-            <Button type="submit" disabled={loading} className="w-full gradient-rose text-white border-0 shadow-md hover:opacity-90">
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Membuat...
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  <Save className="w-4 h-4" />
-                  Buat & Tambah Soal
-                </span>
-              )}
+            <Button type="submit" disabled={loading} className="w-full gradient-rose text-white border-0 shadow-md">
+              {loading ? "Memproses..." : "Buat Session Game"}
             </Button>
           </form>
         </div>
