@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Question, QuestionType } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Brain, Sparkles, Puzzle, Zap, Star, Music, Image, Plus, X, Save, Upload, Loader2 } from 'lucide-react';
-import { toast } from 'sonner'; // Asumsi menggunakan sonner/toast untuk feedback
 
 interface Props {
   sessionId: string;
@@ -17,10 +16,17 @@ interface Props {
   editQuestion?: Question | null;
 }
 
-// ... (questionTypes constant tetap sama)
+const questionTypes = [
+  { value: 'multiple_choice', label: 'Pilihan Ganda', icon: Brain, color: 'text-sky-600' },
+  { value: 'word_guess', label: 'Tebak Kata', icon: Sparkles, color: 'text-amber-500' },
+  { value: 'puzzle', label: 'Puzzle Gambar', icon: Puzzle, color: 'text-sky-500' },
+  { value: 'memory_game', label: 'Memory Game', icon: Zap, color: 'text-green-500' },
+  { value: 'math_game', label: 'Math Game', icon: Star, color: 'text-orange-500' },
+  { value: 'song_guess', label: 'Tebak Lagu', icon: Music, color: 'text-pink-500' },
+  { value: 'image_guess', label: 'Tebak Gambar', icon: Image, color: 'text-purple-500' },
+];
 
 export default function QuestionBuilder({ sessionId, onSaved, editQuestion }: Props) {
-  // State Management
   const [type, setType] = useState<QuestionType>(editQuestion?.type || 'multiple_choice');
   const [questionText, setQuestionText] = useState(editQuestion?.question_text || '');
   const [options, setOptions] = useState<string[]>(editQuestion?.options || ['', '', '', '']);
@@ -35,188 +41,225 @@ export default function QuestionBuilder({ sessionId, onSaved, editQuestion }: Pr
   const [timeLimit, setTimeLimit] = useState(editQuestion?.time_limit || 30);
   const [hint, setHint] = useState(editQuestion?.hint || '');
   
-  const [memoryPairs, setMemoryPairs] = useState<Array<{ value: string; image_url?: string }>>(
-    editQuestion?.memory_cards 
-      ? (editQuestion.memory_cards as any[]).filter((_, i) => i % 2 === 0) 
-      : [{ value: '' }, { value: '' }]
-  );
-
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // 1. Perbaikan Upload & Preview
   const handleFileUpload = async (file: File, field: 'media' | 'image') => {
     if (!file) return;
-    
-    // Validasi ukuran (contoh max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("File terlalu besar. Maksimal 2MB");
-      return;
-    }
-
     setUploading(true);
     
-    // Tampilkan preview lokal segera (UX lebih cepat)
-    const localPreview = URL.createObjectURL(file);
-    if (field === 'image') setPreviewUrl(localPreview);
+    // Tampilkan preview lokal agar user senang
+    const localURL = URL.createObjectURL(file);
+    if (field === 'image') setPreviewUrl(localURL);
 
     try {
       const ext = file.name.split('.').pop();
-      const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${ext}`;
-      const path = `${sessionId}/${fileName}`;
+      const fileName = `${Date.now()}.${ext}`;
+      const path = `questions/${fileName}`;
 
-      // Perbaikan Bucket Name: 'game-assets'
       const { data, error } = await supabase.storage
-        .from('game-assets')
-        .upload(path, file, { upsert: true });
+        .from('game-assets') // Pastikan nama bucket ini benar di Supabase
+        .upload(path, file);
 
       if (error) throw error;
 
       const { data: urlData } = supabase.storage.from('game-assets').getPublicUrl(data.path);
       
       if (field === 'media') setMediaUrl(urlData.publicUrl);
-      else setImageUrl(urlData.publicUrl);
-      
-      toast.success("Upload berhasil");
-    } catch (error: any) {
-      toast.error("Upload gagal: " + error.message);
-      setPreviewUrl(editQuestion?.image_url || null); // Revert preview jika gagal
+      else {
+        setImageUrl(urlData.publicUrl);
+        setPreviewUrl(urlData.publicUrl);
+      }
+    } catch (err: any) {
+      alert("Gagal upload: " + err.message);
     } finally {
       setUploading(false);
     }
   };
 
-  // 2. Perbaikan Logic Simpan
   const handleSave = async () => {
-    // Validasi dasar
-    if (!questionText && type !== 'math_game' && type !== 'memory_game') {
-      toast.error("Pertanyaan wajib diisi");
-      return;
-    }
-
+    if (!sessionId) return;
     setSaving(true);
+
+    const questionData = {
+      session_id: sessionId,
+      type,
+      question_text: questionText,
+      options: type === 'multiple_choice' ? options.filter(opt => opt !== '') : null,
+      correct_answer: correctAnswer,
+      media_url: mediaUrl || null,
+      image_url: imageUrl || null,
+      image_effect: imageEffect,
+      puzzle_pieces: puzzlePieces,
+      math_expression: mathExpression || null,
+      points,
+      time_limit: timeLimit,
+      hint: hint || null,
+    };
+
     try {
-      // Logic ID unik untuk memory cards
-      const memoryCards = memoryPairs.flatMap((pair, idx) => [
-        { id: `card-${idx}-a`, value: pair.value, image_url: pair.image_url },
-        { id: `card-${idx}-b`, value: pair.value, image_url: pair.image_url },
-      ]);
-
-      const questionData = {
-        session_id: sessionId,
-        type,
-        question_text: questionText,
-        options: type === 'multiple_choice' ? options.filter(opt => opt.trim() !== '') : null,
-        correct_answer: correctAnswer,
-        media_url: mediaUrl || null,
-        media_type: mediaUrl ? (type === 'song_guess' ? 'audio' : 'video') : null,
-        image_url: imageUrl || null,
-        image_effect: imageEffect,
-        puzzle_pieces: puzzlePieces,
-        memory_cards: type === 'memory_game' ? memoryCards : null,
-        math_expression: type === 'math_game' ? mathExpression : null,
-        points,
-        time_limit: timeLimit,
-        hint: hint || null,
-      };
-
       let error;
       if (editQuestion?.id) {
-        const { error: updateError } = await supabase
-          .from('questions')
-          .update(questionData)
-          .eq('id', editQuestion.id);
-        error = updateError;
+        const { error: err } = await supabase.from('questions').update(questionData).eq('id', editQuestion.id);
+        error = err;
       } else {
-        const { error: insertError } = await supabase
-          .from('questions')
-          .insert([questionData]);
-        error = insertError;
+        const { error: err } = await supabase.from('questions').insert([questionData]);
+        error = err;
       }
 
       if (error) throw error;
-
-      toast.success("Soal berhasil disimpan!");
       
-      // Reset form jika bukan mode edit
-      if (!editQuestion) resetForm();
+      // Reset form jika berhasil
+      setQuestionText('');
+      setCorrectAnswer('');
+      setImageUrl('');
+      setPreviewUrl(null);
       
-      // Trigger refresh daftar soal di parent
-      onSaved();
-      
-    } catch (error: any) {
-      toast.error("Gagal menyimpan: " + error.message);
+      onSaved(); // Refresh daftar soal
+    } catch (err: any) {
+      alert("Gagal simpan: " + err.message);
     } finally {
       setSaving(false);
     }
   };
 
-  const resetForm = () => {
-    setQuestionText('');
-    setCorrectAnswer('');
-    setImageUrl('');
-    setPreviewUrl(null);
-    setOptions(['', '', '', '']);
-    // Reset state lainnya sesuai kebutuhan
-  };
-
   return (
-    <div className="space-y-5 p-1">
-      {/* ... (Tipe Soal tetap sama) ... */}
+    <div className="space-y-6 bg-white p-4 rounded-2xl border border-sky-50 shadow-sm">
+      {/* TIPE SOAL - Ikon Cantik */}
+      <div>
+        <Label className="text-sm font-bold mb-3 block text-sky-900">Pilih Jenis Permainan</Label>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {questionTypes.map((qt) => (
+            <button
+              key={qt.value}
+              type="button"
+              onClick={() => setType(qt.value as QuestionType)}
+              className={`p-3 rounded-xl border-2 text-xs font-semibold transition-all flex flex-col items-center gap-2 ${
+                type === qt.value
+                  ? 'border-sky-500 bg-sky-50 text-sky-700 shadow-inner'
+                  : 'border-gray-100 hover:border-sky-200 text-gray-500'
+              }`}
+            >
+              <qt.icon className={`w-5 h-5 ${type === qt.value ? 'text-sky-600' : qt.color}`} />
+              {qt.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      {/* Preview Gambar (UX diperbaiki) */}
-      {(type === 'puzzle' || type === 'image_guess') && (
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Gambar Kuis</Label>
-          <div className="flex flex-col gap-3">
+      {/* INPUT UTAMA */}
+      <div className="space-y-4 pt-4 border-t border-gray-50">
+        {type !== 'math_game' && (
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Pertanyaan / Petunjuk</Label>
+            <Textarea
+              placeholder="Apa yang harus dilakukan peserta?"
+              value={questionText}
+              onChange={(e) => setQuestionText(e.target.value)}
+              className="border-sky-100 focus-visible:ring-sky-300 min-h-[80px]"
+            />
+          </div>
+        )}
+
+        {/* KHUSUS PILIHAN GANDA */}
+        {type === 'multiple_choice' && (
+          <div className="space-y-3">
+            <Label className="text-sm font-medium">Pilihan Jawaban (Klik huruf untuk kunci jawaban)</Label>
+            {options.map((opt, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCorrectAnswer(opt)}
+                  className={`w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold transition-colors ${
+                    correctAnswer === opt && opt !== ''
+                      ? 'border-green-500 bg-green-500 text-white'
+                      : 'border-gray-200 text-gray-400'
+                  }`}
+                >
+                  {String.fromCharCode(65 + i)}
+                </button>
+                <Input
+                  placeholder={`Opsi ${String.fromCharCode(65 + i)}`}
+                  value={opt}
+                  onChange={(e) => {
+                    const updated = [...options];
+                    updated[i] = e.target.value;
+                    setOptions(updated);
+                  }}
+                  className="border-sky-50"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* KHUSUS PUZZLE & TEBAK GAMBAR */}
+        {(type === 'puzzle' || type === 'image_guess') && (
+          <div className="space-y-3 bg-sky-50/50 p-4 rounded-xl border border-sky-100">
+            <Label className="text-sm font-medium">Upload Gambar Kuis</Label>
             <div className="flex gap-2">
               <Input
-                placeholder="URL gambar..."
+                placeholder="URL Gambar..."
                 value={imageUrl}
-                onChange={(e) => {
-                  setImageUrl(e.target.value);
-                  setPreviewUrl(e.target.value);
-                }}
-                className="border-sky-100"
+                onChange={(e) => {setImageUrl(e.target.value); setPreviewUrl(e.target.value);}}
+                className="bg-white"
               />
-              <label className="relative cursor-pointer">
-                <Button type="button" variant="outline" disabled={uploading} className="border-sky-200 text-sky-600">
-                  {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-                  Upload
+              <label className="cursor-pointer">
+                <Button type="button" variant="outline" className="bg-white border-sky-200 text-sky-600">
+                  <Upload className="w-4 h-4 mr-2" /> {uploading ? '...' : 'Pilih'}
                 </Button>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'image')}
+                <input type="file" accept="image/*" className="hidden" 
+                  onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'image')} 
                 />
               </label>
             </div>
-            
             {previewUrl && (
-              <div className="relative w-full h-48 rounded-xl overflow-hidden border-2 border-dashed border-sky-200 bg-slate-50">
-                <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" />
-                <button 
-                  onClick={() => {setPreviewUrl(null); setImageUrl('');}}
-                  className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+              <div className="mt-2 relative group">
+                <img src={previewUrl} alt="Preview" className="w-full h-40 object-contain rounded-lg border bg-white" />
+                <button onClick={() => {setPreviewUrl(null); setImageUrl('');}} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full"><X className="w-4 h-4"/></button>
               </div>
             )}
+            {type === 'puzzle' && (
+               <div className="mt-2">
+                <Label className="text-xs">Jumlah Kepingan: {puzzlePieces}</Label>
+                <select className="w-full text-sm p-2 rounded-lg mt-1" value={puzzlePieces} onChange={(e)=>setPuzzlePieces(Number(e.target.value))}>
+                  <option value={36}>36 Keping (Mudah)</option>
+                  <option value={64}>64 Keping (Sedang)</option>
+                  <option value={100}>100 Keping (Sulit)</option>
+                </select>
+               </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ... (Input lainnya tetap sama, pastikan menggunakan state yang benar) ... */}
+        {/* KHUSUS TEBAK LAGU */}
+        {type === 'song_guess' && (
+          <div className="space-y-3 bg-pink-50/30 p-4 rounded-xl border border-pink-100">
+            <Label className="text-sm font-medium">Audio Lagu</Label>
+            <Input
+              placeholder="Masukkan link audio atau upload"
+              value={mediaUrl}
+              onChange={(e) => setMediaUrl(e.target.value)}
+              className="bg-white"
+            />
+            <Input
+              placeholder="Judul Lagu (Jawaban Benar)"
+              value={correctAnswer}
+              onChange={(e) => setCorrectAnswer(e.target.value)}
+              className="bg-white"
+            />
+          </div>
+        )}
+      </div>
 
+      {/* TOMBOL SIMPAN */}
       <Button 
         onClick={handleSave} 
         disabled={saving || uploading} 
-        className="w-full bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-lg py-6"
+        className="w-full py-6 gradient-rose text-white border-0 shadow-lg hover:opacity-90 transition-all font-bold text-lg"
       >
         {saving ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
-        {editQuestion ? 'Perbarui Soal' : 'Simpan Soal'}
+        {editQuestion ? 'Perbarui Soal' : 'Simpan Soal Sekarang'}
       </Button>
     </div>
   );
