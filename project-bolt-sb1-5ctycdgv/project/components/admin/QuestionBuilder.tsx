@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Brain, Sparkles, Puzzle, Zap, Star, Music, Image, Plus, X, Save, Upload, Loader2, CheckCircle2, Video as VideoIcon } from 'lucide-react';
+import { Brain, Sparkles, Puzzle, Zap, Star, Music, Image, Plus, X, Save, Upload, Loader2, CheckCircle2, Video } from 'lucide-react';
 
 interface Props {
   sessionId: string;
@@ -39,14 +39,15 @@ export default function QuestionBuilder({ sessionId, onSaved, editQuestion }: Pr
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Bersihkan gambar jika ganti tipe game
+  // RESET gambar & media jika ganti tipe kuis
   useEffect(() => {
     if (!editQuestion) {
       setImageUrl('');
       setPreviewUrl(null);
       setMediaUrl('');
+      setImageEffect('none');
     }
-  }, [type]);
+  }, [type, editQuestion]);
 
   const handleFileUpload = async (file: File) => {
     setUploading(true);
@@ -57,7 +58,7 @@ export default function QuestionBuilder({ sessionId, onSaved, editQuestion }: Pr
       const { data: urlData } = supabase.storage.from('game-assets').getPublicUrl(data.path);
       setImageUrl(urlData.publicUrl);
       setPreviewUrl(urlData.publicUrl);
-    } catch (err: any) { alert("Gagal upload: " + err.message); }
+    } catch (err: any) { alert("Upload gagal: " + err.message); }
     finally { setUploading(false); }
   };
 
@@ -89,25 +90,25 @@ export default function QuestionBuilder({ sessionId, onSaved, editQuestion }: Pr
   };
 
   return (
-    <div className="space-y-6 bg-white p-6 rounded-2xl border shadow-sm">
+    <div className="space-y-6 bg-white p-6 rounded-2xl border border-sky-100 shadow-sm">
       {/* Tombol Tipe Game */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {questionTypes.map((qt) => (
           <button key={qt.value} onClick={() => setType(qt.value as QuestionType)}
-            className={`p-3 rounded-xl border-2 text-xs font-bold flex flex-col items-center gap-2 transition-all ${type === qt.value ? 'border-sky-500 bg-sky-50 text-sky-700' : 'border-gray-100 text-gray-500'}`}>
+            className={`p-3 rounded-xl border-2 text-xs font-bold flex flex-col items-center gap-2 transition-all ${type === qt.value ? 'border-sky-500 bg-sky-50 text-sky-700' : 'border-gray-50 hover:border-sky-200 text-gray-500'}`}>
             <qt.icon className="w-5 h-5" /> {qt.label}
           </button>
         ))}
       </div>
 
       <div className="space-y-4 pt-4 border-t">
-        <Label className="text-sm font-bold">Instruksi Game Master</Label>
+        <Label className="text-sm font-bold">Instruksi / Judul Kuis</Label>
         <Textarea value={questionText} onChange={(e) => setQuestionText(e.target.value)} placeholder="Tulis instruksi game..." />
 
-        {/* PILIHAN GANDA */}
+        {/* 1. PILIHAN GANDA */}
         {type === 'multiple_choice' && (
           <div className="space-y-3">
-            <Label className="text-sm font-bold text-sky-700">Pilihan Jawaban (Klik Centang untuk Jawaban Benar)</Label>
+            <Label className="text-sm font-bold text-sky-700">Opsi Jawaban (Klik centang untuk jawaban benar)</Label>
             {options.map((opt, i) => (
               <div key={i} className="flex gap-2 items-center">
                 <button onClick={() => setCorrectAnswer(opt)} 
@@ -124,25 +125,25 @@ export default function QuestionBuilder({ sessionId, onSaved, editQuestion }: Pr
           </div>
         )}
 
-        {/* PUZZLE & TEBAK GAMBAR */}
+        {/* 2. PUZZLE & TEBAK GAMBAR */}
         {(type === 'puzzle' || type === 'image_guess') && (
-          <div className="p-4 bg-sky-50 rounded-xl space-y-4 border border-sky-100">
-            <Label className="font-bold">Gambar Kuis</Label>
+          <div className="p-4 bg-sky-50 rounded-xl space-y-4 border border-sky-200">
+            <Label className="font-bold text-sky-900">Media Gambar</Label>
             <div className="flex gap-2">
-              <Input value={imageUrl} onChange={(e) => {setImageUrl(e.target.value); setPreviewUrl(e.target.value);}} placeholder="URL atau Upload..." className="bg-white" />
-              <Button onClick={() => document.getElementById('up-img-trigger')?.click()} variant="outline" className="bg-white border-sky-200">
-                <Upload className="w-4 h-4 mr-2" /> {uploading ? '...' : 'Pilih File'}
+              <Input value={imageUrl} onChange={(e) => {setImageUrl(e.target.value); setPreviewUrl(e.target.value);}} placeholder="Link URL atau Upload..." className="bg-white" />
+              <Button type="button" onClick={() => document.getElementById('up-trigger')?.click()} variant="outline" className="bg-white border-sky-200">
+                <Upload className="w-4 h-4 mr-2" /> {uploading ? '...' : 'Pilih'}
               </Button>
-              <input id="up-img-trigger" type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
+              <input id="up-trigger" type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
             </div>
 
             {previewUrl && (
-              <div className="relative mt-2 border-2 border-white rounded-lg overflow-hidden shadow-md bg-white">
+              <div className="relative mt-2 border-4 border-white rounded-lg shadow-lg overflow-hidden bg-white">
                 <img src={previewUrl} className="w-full h-48 object-contain" alt="Preview" />
                 <button 
-                  type="button"
+                  type="button" 
                   onClick={() => {setPreviewUrl(null); setImageUrl('');}} 
-                  className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 transition-colors z-10"
+                  className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 transition-colors z-20 shadow-lg"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -151,8 +152,8 @@ export default function QuestionBuilder({ sessionId, onSaved, editQuestion }: Pr
             
             {type === 'image_guess' && (
                <div className="space-y-2">
-                  <Label className="text-xs font-semibold">Efek Gambar</Label>
-                  <Select value={imageEffect} onValueChange={(val) => setImageEffect(val)}>
+                  <Label className="text-xs font-bold">Efek Gambar Tebakan</Label>
+                  <Select value={imageEffect} onValueChange={(v) => setImageEffect(v)}>
                     <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                     <SelectContent>
                        <SelectItem value="none">Normal</SelectItem>
@@ -166,14 +167,14 @@ export default function QuestionBuilder({ sessionId, onSaved, editQuestion }: Pr
 
             {type === 'puzzle' && (
               <div className="space-y-2">
-                <Label className="text-xs font-semibold">Potongan Puzzle</Label>
+                <Label className="text-xs font-bold">Potongan Puzzle</Label>
                 <Select value={puzzlePieces.toString()} onValueChange={(v) => setPuzzlePieces(Number(v))}>
                   <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="36">36 Potongan</SelectItem>
-                    <SelectItem value="64">64 Potongan</SelectItem>
-                    <SelectItem value="100">100 Potongan</SelectItem>
-                    <SelectItem value="144">144 Potongan</SelectItem>
+                    <SelectItem value="36">36 Keping</SelectItem>
+                    <SelectItem value="64">64 Keping</SelectItem>
+                    <SelectItem value="100">100 Keping</SelectItem>
+                    <SelectItem value="144">144 Keping</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -181,32 +182,32 @@ export default function QuestionBuilder({ sessionId, onSaved, editQuestion }: Pr
           </div>
         )}
 
-        {/* TEBAK LAGU / VIDEO */}
+        {/* 3. TEBAK LAGU / VIDEO */}
         {type === 'song_guess' && (
-          <div className="space-y-4 p-4 bg-pink-50 rounded-xl border border-pink-100">
+          <div className="space-y-4 p-4 bg-pink-50 rounded-xl border border-pink-200">
              <div className="flex gap-2">
-                <Button type="button" onClick={() => setMediaType('audio')} variant={mediaType === 'audio' ? 'default' : 'outline'} className="flex-1">
+                <Button type="button" onClick={() => setMediaType('audio')} variant={mediaType === 'audio' ? 'default' : 'outline'} className="flex-1 bg-white border-pink-200">
                    <Music className="w-4 h-4 mr-2" /> Audio
                 </Button>
-                <Button type="button" onClick={() => setMediaType('video')} variant={mediaType === 'video' ? 'default' : 'outline'} className="flex-1">
-                   <VideoIcon className="w-4 h-4 mr-2" /> Video
+                <Button type="button" onClick={() => setMediaType('video')} variant={mediaType === 'video' ? 'default' : 'outline'} className="flex-1 bg-white border-pink-200">
+                   <Video className="w-4 h-4 mr-2" /> Video
                 </Button>
              </div>
-             <Input value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)} placeholder="Link URL (MP3/YouTube)..." className="bg-white" />
-             <Input value={correctAnswer} onChange={(e) => setCorrectAnswer(e.target.value)} placeholder="Judul Lagu/Video (Jawaban)..." className="bg-white" />
+             <Input value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)} placeholder="URL file MP3/YouTube..." className="bg-white" />
+             <Input value={correctAnswer} onChange={(e) => setCorrectAnswer(e.target.value)} placeholder="Judul Lagu (Jawaban Benar)..." className="bg-white" />
           </div>
         )}
 
-        {/* KUNCI JAWABAN LAIN (MATH/KATA) */}
+        {/* 4. JAWABAN LAIN (MATH/KATA) */}
         {(type === 'math_game' || type === 'word_guess') && (
            <div className="space-y-1.5">
-             <Label className="font-bold">Kunci Jawaban</Label>
-             <Input value={correctAnswer} onChange={(e) => setCorrectAnswer(e.target.value)} placeholder="Tulis jawaban benar..." />
+             <Label className="font-bold">Kunci Jawaban Benar</Label>
+             <Input value={correctAnswer} onChange={(e) => setCorrectAnswer(e.target.value)} placeholder="Jawaban di sini..." />
            </div>
         )}
       </div>
 
-      <Button onClick={handleSave} disabled={saving || uploading} className="w-full py-6 gradient-rose text-white font-bold text-lg">
+      <Button onClick={handleSave} disabled={saving || uploading} className="w-full py-6 gradient-rose text-white font-bold text-lg shadow-lg">
         {saving ? "Menyimpan..." : "Simpan Soal Sekarang"}
       </Button>
     </div>
